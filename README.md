@@ -1,4 +1,4 @@
-# Monolith Cumpounder
+# Monolith Compounder
 
 Yearn V3 tokenized strategy that autocompounds a staked [Monolith](https://app.monolith.market) gov token, e.g. SWAN, the DAO token of swanUSD.
 

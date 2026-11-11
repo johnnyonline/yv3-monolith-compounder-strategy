@@ -53,7 +53,7 @@ contract Deploy is Script {
             s_roleManager = ROLE_MANAGER;
         }
 
-        string memory _name = "Monolith SWAN Cumpounder";
+        string memory _name = "Monolith SWAN Compounder";
 
         vm.startBroadcast(_pk);
 

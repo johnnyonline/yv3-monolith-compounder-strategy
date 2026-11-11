@@ -13,7 +13,7 @@ import {AuctionFactory} from "@periphery/Auctions/AuctionFactory.sol";
 
 import {IStakedGovToken} from "./interfaces/IStakedGovToken.sol";
 
-contract MonolithCumpounder is BaseSwapper, BaseHealthCheck {
+contract MonolithCompounder is BaseSwapper, BaseHealthCheck {
 
     using SafeERC20 for ERC20;
 
