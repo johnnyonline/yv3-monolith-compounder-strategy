@@ -1,8 +1,22 @@
-# Tokenized Strategy Mix for Yearn V3 strategies
+# Monolith Cumpounder
 
-This repo will allow you to write, test and deploy V3 "Tokenized Strategies" using [Foundry](https://book.getfoundry.sh/).
+Yearn V3 tokenized strategy that autocompounds a staked [Monolith](https://app.monolith.market) gov token, e.g. SWAN, the DAO token of swanUSD.
 
-You will only need to override the three functions in Strategy.sol of `_deployFunds`, `_freeFunds` and `_harvestAndReport`. With the option to also override `_tend`, `_tendTrigger`, `availableDepositLimit`, `availableWithdrawLimit` and `_emergencyWithdraw` if desired.
+- Deposits stake the gov token into its staked gov token (instant and 1:1 both ways).
+- The staked gov token earns the coin as revenue. Each report claims it and kicks it into the strategy's own Yearn dutch auction, which pays the strategy in the gov token. The next report restakes the proceeds.
+- Only the strategy can kick its auction. Keepers can also claim and kick between reports with `kickAuction`. Management sets the auction's prices and can enable other tokens to sell with `enableAuctionToken`.
+- Rewards at or below `minAmountToSell` are held until the next kick. Management can delegate the strategy's votes with `delegate`.
+- `StrategyFactory.newStrategy(asset, name, staking)` deploys one per gov token. Only the factory's management can call it. Auction prices are set afterwards.
+- `MonolithSwanAprOracle` works like the Monolith UI. It takes the market's current yearly revenue (the local reserve share of interest plus the PSM's sUSDS yield) times the stakers' share, prices it in the gov token and divides by the staked supply. The price is a manual one if set, else the Uniswap V4 pool's spot price. Governance and the keepers it allows can set the manual price.
+
+`script/Deploy.s.sol` deploys the factory, the SWAN strategy, the APR oracle and a Yearn V3 vault (`yvSWAN`) with the strategy as its only strategy. Only the vault can deposit into the strategy. Profit unlocking (3 days) and fees live at the vault, so the strategy has neither. Vault role management goes to the Yearn RoleManager, whose `addNewVault` sets the vault's accountant. The strategy's votes are delegated to Inverse's multisig (`0x9D5Df30F475CEA915b1ed4C0CCa59255C897b61B`).
+
+| Contract | Address |
+| --- | --- |
+| SWAN (asset) | `0xD0a32F6d4850F9D6DF7d4F8f84af1Fcd3Cf993CC` |
+| sSWAN (staking) | `0xcBC108384e874D9B0436adE3918685BaA709e48c` |
+| swanUSD (reward) | `0x9BF2B2F57A2968A0E81546Ed50cBbbb7C9d6e05E` |
+| swanUSD/SWAN V4 pool (oracle price) | fee `6000`, tick spacing `60`, no hooks |
 
 For a more complete overview of how the Tokenized Strategies work please visit the [TokenizedStrategy Repo](https://github.com/yearn/tokenized-strategy).
 

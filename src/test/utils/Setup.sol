@@ -3,28 +3,42 @@ pragma solidity ^0.8.18;
 
 import "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
+import "../../../script/Deploy.s.sol";
 
-import {Strategy, ERC20} from "../../Strategy.sol";
-import {StrategyFactory} from "../../StrategyFactory.sol";
+import {ERC20} from "../../Strategy.sol";
+import {Auction} from "@periphery/Auctions/Auction.sol";
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
+import {IStakedGovToken} from "../../interfaces/IStakedGovToken.sol";
+import {IRevenueRouter} from "../../interfaces/IMonolith.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
 
 interface IFactory {
+
     function governance() external view returns (address);
 
-    function set_protocol_fee_bps(uint16) external;
+    function set_protocol_fee_bps(
+        uint16
+    ) external;
 
-    function set_protocol_fee_recipient(address) external;
+    function set_protocol_fee_recipient(
+        address
+    ) external;
+
 }
 
-contract Setup is Test, IEvents {
+contract Setup is Deploy, Test, IEvents {
+
     // Contract instances that we will use repeatedly.
     ERC20 public asset;
+    ERC20 public rewardsToken;
     IStrategyInterface public strategy;
-
+    IStakedGovToken public staking;
     StrategyFactory public strategyFactory;
+    IVault public vault;
+    MonolithSwanAprOracle public oracle;
+    Auction public auction;
 
     mapping(string => address) public tokenAddrs;
 
@@ -34,58 +48,98 @@ contract Setup is Test, IEvents {
     address public management = address(1);
     address public performanceFeeRecipient = address(3);
     address public emergencyAdmin = address(5);
+    address public taker = address(6);
 
     // Address of the real deployed Factory
     address public factory;
+
+    // Sends revenue to the staked gov token
+    address public revenueRouter;
 
     // Integer variables that will be used repeatedly.
     uint256 public decimals;
     uint256 public MAX_BPS = 10_000;
 
-    // Fuzz from $0.01 of 1e6 stable coins up to 1 trillion of a 1e18 coin
-    uint256 public maxFuzzAmount = 1e30;
-    uint256 public minFuzzAmount = 10_000;
+    // Takers wait for the auction to come down to about the market price, in SWAN per swanUSD
+    uint256 public marketPrice = 3e18;
 
-    // Default profit max unlock time is set for 10 days
-    uint256 public profitMaxUnlockTime = 10 days;
+    // Fuzz from 10k SWAN up to 1M SWAN. ~230k SWAN is staked at the fork block
+    uint256 public maxFuzzAmount = 1_000_000e18;
+    uint256 public minFuzzAmount = 10_000e18;
 
     function setUp() public virtual {
+        uint256 _blockNumber = 26_391_500; // Caching for faster tests
+        vm.selectFork(vm.createFork(vm.envString("ETH_RPC_URL"), _blockNumber));
+
         _setTokenAddrs();
 
         // Set asset
-        asset = ERC20(tokenAddrs["DAI"]);
+        asset = ERC20(tokenAddrs["SWAN"]);
+        rewardsToken = ERC20(tokenAddrs["swanUSD"]);
 
         // Set decimals
         decimals = asset.decimals();
 
-        strategyFactory = new StrategyFactory(management, performanceFeeRecipient, keeper, emergencyAdmin);
+        // Flush pending revenue so tests control what the strategy earns
+        revenueRouter = IStakedGovToken(SSWAN).revenueRouter();
+        IRevenueRouter(revenueRouter).distribute();
+
+        // Set script vars
+        s_management = management;
+        s_performanceFeeRecipient = performanceFeeRecipient;
+        s_keeper = keeper;
+        s_emergencyAdmin = emergencyAdmin;
+        s_roleManager = management;
 
         // Deploy strategy and set variables
         strategy = IStrategyInterface(setUpStrategy());
 
         factory = strategy.FACTORY();
+        strategyFactory = s_factory;
+        vault = s_vault;
+        oracle = s_oracle;
+        auction = Auction(strategy.auction());
+        staking = IStakedGovToken(strategy.STAKING());
 
         // label all the used addresses for traces
         vm.label(keeper, "keeper");
         vm.label(factory, "factory");
+        vm.label(address(strategyFactory), "strategyFactory");
+        vm.label(address(vault), "vault");
+        vm.label(address(oracle), "oracle");
+        vm.label(address(auction), "auction");
         vm.label(address(asset), "asset");
+        vm.label(address(rewardsToken), "rewardsToken");
+        vm.label(address(staking), "staking");
+        vm.label(revenueRouter, "revenueRouter");
         vm.label(management, "management");
         vm.label(address(strategy), "strategy");
         vm.label(performanceFeeRecipient, "performanceFeeRecipient");
+        vm.label(taker, "taker");
     }
 
     function setUpStrategy() public returns (address) {
+        // notify deployment script that this is a test
+        isTest = true;
+        // deploy and initialize contracts
+        run();
         // we save the strategy as a IStrategyInterface to give it the needed interface
-        IStrategyInterface _strategy =
-            IStrategyInterface(address(strategyFactory.newStrategy(address(asset), "Tokenized Strategy")));
+        IStrategyInterface _strategy = s_newStrategy;
 
-        vm.prank(management);
+        vm.startPrank(management);
         _strategy.acceptManagement();
+        // Only the vault can deposit, let `user` in too to test the strategy directly
+        _strategy.setAllowed(user, true);
+        vm.stopPrank();
 
         return address(_strategy);
     }
 
-    function depositIntoStrategy(IStrategyInterface _strategy, address _user, uint256 _amount) public {
+    function depositIntoStrategy(
+        IStrategyInterface _strategy,
+        address _user,
+        uint256 _amount
+    ) public {
         vm.prank(_user);
         asset.approve(address(_strategy), _amount);
 
@@ -93,9 +147,32 @@ contract Setup is Test, IEvents {
         _strategy.deposit(_amount, _user);
     }
 
-    function mintAndDepositIntoStrategy(IStrategyInterface _strategy, address _user, uint256 _amount) public {
+    function mintAndDepositIntoStrategy(
+        IStrategyInterface _strategy,
+        address _user,
+        uint256 _amount
+    ) public {
         airdrop(asset, _user, _amount);
         depositIntoStrategy(_strategy, _user, _amount);
+    }
+
+    // Distribute enough revenue to the staked gov token for the strategy to earn ~`_rewards`
+    function earn(
+        uint256 _rewards
+    ) public {
+        airdrop(rewardsToken, revenueRouter, _rewards * staking.totalSupply() / strategy.balanceOfStake());
+        IRevenueRouter(revenueRouter).distribute();
+    }
+
+    // Taker waits for about the market price, then buys the whole lot paying `asset` to the strategy
+    function take() public returns (uint256 _paid) {
+        while (auction.price(address(rewardsToken)) > marketPrice) skip(1 hours);
+        _paid = auction.getAmountNeeded(address(rewardsToken));
+        airdrop(asset, taker, _paid);
+        vm.startPrank(taker);
+        asset.approve(address(auction), _paid);
+        auction.take(address(rewardsToken));
+        vm.stopPrank();
     }
 
     // For checking the amounts in the strategy
@@ -115,12 +192,19 @@ contract Setup is Test, IEvents {
         assertEq(_totalAssets, _totalDebt + _totalIdle, "!Added");
     }
 
-    function airdrop(ERC20 _asset, address _to, uint256 _amount) public {
+    function airdrop(
+        ERC20 _asset,
+        address _to,
+        uint256 _amount
+    ) public {
         uint256 balanceBefore = _asset.balanceOf(_to);
         deal(address(_asset), _to, balanceBefore + _amount);
     }
 
-    function setFees(uint16 _protocolFee, uint16 _performanceFee) public {
+    function setFees(
+        uint16 _protocolFee,
+        uint16 _performanceFee
+    ) public {
         address gov = IFactory(factory).governance();
 
         // Need to make sure there is a protocol fee recipient to set the fee.
@@ -135,12 +219,9 @@ contract Setup is Test, IEvents {
     }
 
     function _setTokenAddrs() internal {
-        tokenAddrs["WBTC"] = 0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599;
-        tokenAddrs["YFI"] = 0x0bc529c00C6401aEF6D220BE8C6Ea1667F6Ad93e;
+        tokenAddrs["SWAN"] = 0xD0a32F6d4850F9D6DF7d4F8f84af1Fcd3Cf993CC;
+        tokenAddrs["swanUSD"] = 0x9BF2B2F57A2968A0E81546Ed50cBbbb7C9d6e05E;
         tokenAddrs["WETH"] = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-        tokenAddrs["LINK"] = 0x514910771AF9Ca656af840dff83E8264EcF986CA;
-        tokenAddrs["USDT"] = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
-        tokenAddrs["DAI"] = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
-        tokenAddrs["USDC"] = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     }
+
 }
