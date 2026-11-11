@@ -1,0 +1,23 @@
+{
+  "lib/forge-std": {
+    "branch": {
+      "name": "master",
+      "rev": "fc560fa34fa12a335a50c35d92e55a6628ca467c"
+    }
+  },
+  "lib/openzeppelin-contracts": {
+    "branch": {
+      "name": "v4.9.5",
+      "rev": "bd325d56b4c62c9c5c1aff048c37c6bb18ac0290"
+    }
+  },
+  "lib/tokenized-strategy": {
+    "tag": {
+      "name": "v3.1.1",
+      "rev": "48c53aba0395885b3f579d0a4b426de276a7b69e"
+    }
+  },
+  "lib/tokenized-strategy-periphery": {
+    "rev": "1e334fbdd5955a50c085ec3662c6051efb7fc615"
+  }
+}
