@@ -10,6 +10,7 @@ contract VaultTest is Setup {
     }
 
     function test_setupVaultOK() public {
+        assertEq(vault.apiVersion(), "3.1.1");
         assertEq(vault.asset(), address(asset));
         assertEq(vault.profitMaxUnlockTime(), 3 days);
         assertEq(vault.deposit_limit(), type(uint256).max);

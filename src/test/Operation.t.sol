@@ -250,14 +250,14 @@ contract OperationTest is Setup {
     ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
-        // Delegated to Inverse on deployment
-        assertEq(staking.delegates(address(strategy)), INVERSE, "!delegates");
-        uint256 _inverseVotes = staking.getVotes(INVERSE);
+        // Delegated to the deployer on deployment
+        address _deployer = vm.addr(42069);
+        assertEq(staking.delegates(address(strategy)), _deployer, "!delegates");
 
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
-        assertEq(staking.getVotes(INVERSE), _inverseVotes + _amount, "!votes");
+        assertEq(staking.getVotes(_deployer), _amount, "!votes");
 
         vm.prank(user);
         vm.expectRevert("!management");
@@ -269,7 +269,7 @@ contract OperationTest is Setup {
 
         assertEq(staking.delegates(address(strategy)), management, "!delegates");
         assertEq(staking.getVotes(management), _amount, "!votes");
-        assertEq(staking.getVotes(INVERSE), _inverseVotes, "!votes");
+        assertEq(staking.getVotes(_deployer), 0, "!votes");
     }
 
     function test_setMinAmountToSell(

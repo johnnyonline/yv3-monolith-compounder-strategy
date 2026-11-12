@@ -9,7 +9,7 @@ Yearn V3 tokenized strategy that autocompounds a staked [Monolith](https://app.m
 - `StrategyFactory.newStrategy(asset, name, staking)` deploys one per gov token. Only the factory's management can call it. Auction prices are set afterwards.
 - `MonolithSwanAprOracle` works like the Monolith UI. It takes the market's current yearly revenue (the local reserve share of interest plus the PSM's sUSDS yield) times the stakers' share, prices it in the gov token and divides by the staked supply. The price is a manual one if set, else the Uniswap V4 pool's spot price. Governance and the keepers it allows can set the manual price.
 
-`script/Deploy.s.sol` deploys the factory, the SWAN strategy, the APR oracle and a Yearn V3 vault (`yvSWAN`) with the strategy as its only strategy. Only the vault can deposit into the strategy. Profit unlocking (3 days) and fees live at the vault, so the strategy has neither. Vault role management goes to the Yearn RoleManager, whose `addNewVault` sets the vault's accountant. The strategy's votes are delegated to Inverse's multisig (`0x9D5Df30F475CEA915b1ed4C0CCa59255C897b61B`).
+`script/Deploy.s.sol` deploys the factory, the SWAN strategy, the APR oracle and a Yearn V3 vault (`yvSWAN`) with the strategy as its only strategy. Only the vault can deposit into the strategy. Profit unlocking (3 days) and fees live at the vault, so the strategy has neither. Vault role management goes to the Yearn RoleManager, whose `addNewVault` sets the vault's accountant. The strategy's votes are delegated to the deployer.
 
 | Contract | Address |
 | --- | --- |

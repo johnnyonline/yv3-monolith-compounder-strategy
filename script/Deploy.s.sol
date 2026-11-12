@@ -33,11 +33,10 @@ contract Deploy is Script {
     address public constant DEPLOYER = 0x420ACF637D662b80cca8bEfb327AA24039E7e0Fa; // gm.johnnyonline.eth
     address public constant YHAAS = 0x604e586F17cE106B64185A7a0d2c1Da5bAce711E; // yHAAS
     address public constant ROLE_MANAGER = 0xb3bd6B2E61753C311EFbCF0111f75D29706D9a41; // Yearn RoleManager
-    IVaultFactory public constant VAULT_FACTORY = IVaultFactory(0x770D0d1Fb036483Ed4AbB6d53c1C88fb277D812F); // 3.0.4 Vault Factory
+    IVaultFactory public constant VAULT_FACTORY = IVaultFactory(0x311de24e48C360B9A7765E7aB7eCDBABCd27B134); // 3.1.1 Vault Factory
 
     address public constant SWAN = 0xD0a32F6d4850F9D6DF7d4F8f84af1Fcd3Cf993CC;
     address public constant SSWAN = 0xcBC108384e874D9B0436adE3918685BaA709e48c;
-    address public constant INVERSE = 0x9D5Df30F475CEA915b1ed4C0CCa59255C897b61B; // Inverse multisig
 
     function run() public {
         uint256 _pk = isTest ? 42069 : vm.envUint("DEPLOYER_PRIVATE_KEY");
@@ -71,7 +70,7 @@ contract Deploy is Script {
         s_newStrategy.setProfitMaxUnlockTime(0);
         s_newStrategy.setPerformanceFee(0);
         s_newStrategy.setAllowed(address(s_vault), true);
-        s_newStrategy.delegate(INVERSE); // Inverse votes the strategy's sSWAN
+        s_newStrategy.delegate(_deployer); // Deployer votes the strategy's sSWAN
         s_newStrategy.setPendingManagement(s_management);
 
         // init vault
