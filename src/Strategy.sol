@@ -162,14 +162,13 @@ contract MonolithCompounder is BaseSwapper, BaseHealthCheck {
     }
 
     /// @notice Kick an auction selling a token for `asset`
-    /// @dev Claims rewards first when kicking `REWARDS_TOKEN`. Noop at or below `minAmountToSell`
+    /// @dev Claims rewards first when kicking `REWARDS_TOKEN`
     /// @param _token Token to sell
     function kickAuction(
         address _token
     ) external onlyKeepers {
         if (_token == REWARDS_TOKEN) _claimRewards();
-        uint256 _balance = ERC20(_token).balanceOf(address(this));
-        if (_balance > minAmountToSell[_token]) _kickAuction(_token, _balance);
+        _kickAuction(_token);
     }
 
     // ===============================================================
@@ -192,10 +191,11 @@ contract MonolithCompounder is BaseSwapper, BaseHealthCheck {
 
     /// @inheritdoc BaseStrategy
     function _harvestAndReport() internal override returns (uint256) {
-        // Claim rewards and put them up for auction
+        // Claim rewards
         _claimRewards();
-        uint256 _rewards = balanceOfRewards();
-        if (_rewards > minAmountToSell[REWARDS_TOKEN]) _kickAuction(REWARDS_TOKEN, _rewards);
+
+        // Put them up for auction
+        _kickAuction(REWARDS_TOKEN);
 
         // Stake idle `asset`
         uint256 _balance = balanceOfAsset();
@@ -217,13 +217,11 @@ contract MonolithCompounder is BaseSwapper, BaseHealthCheck {
         STAKING.harvestAndGetReward();
     }
 
-    /// @notice Send a token to the auction and kick it
-    /// @dev Noop while the last auction of the token still has some left
+    /// @notice Kick an auction of a token, relisting anything left unsold
+    /// @dev Noop while the last auction still has some left, or if the lot is at or below `minAmountToSell`
     /// @param _token Token to sell
-    /// @param _balance Amount of `_token` to add to the lot
     function _kickAuction(
-        address _token,
-        uint256 _balance
+        address _token
     ) internal {
         require(_token != address(asset), "!asset");
 
@@ -232,7 +230,11 @@ contract MonolithCompounder is BaseSwapper, BaseHealthCheck {
             auction.settle(_token);
         }
 
-        ERC20(_token).safeTransfer(address(auction), _balance);
+        // The lot is our balance plus whatever the auction still holds
+        uint256 _balance = ERC20(_token).balanceOf(address(this));
+        if (_balance + ERC20(_token).balanceOf(address(auction)) <= minAmountToSell[_token]) return;
+
+        if (_balance > 0) ERC20(_token).safeTransfer(address(auction), _balance);
         auction.kick(_token);
     }
 

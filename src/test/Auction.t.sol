@@ -94,6 +94,46 @@ contract AuctionTest is Setup {
         assertGe(auction.available(address(rewardsToken)), _lots, "!kicked");
     }
 
+    function test_kickAuction_relistUnsold(
+        uint256 _amount
+    ) public {
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        // Report kicks a lot
+        earn(_amount / 50);
+        vm.prank(keeper);
+        strategy.report();
+        uint256 _lot = rewardsToken.balanceOf(address(auction));
+
+        // Rewards stop: shut down and unstake everything
+        vm.startPrank(emergencyAdmin);
+        strategy.shutdownStrategy();
+        strategy.emergencyWithdraw(type(uint256).max);
+        vm.stopPrank();
+
+        // The lot goes unsold
+        skip(1 days + 1);
+        assertFalse(auction.isActive(address(rewardsToken)), "!ended");
+
+        // Report relists it with no new rewards
+        vm.prank(keeper);
+        strategy.report();
+
+        assertEq(auction.kicked(address(rewardsToken)), block.timestamp, "!relisted");
+        assertEq(auction.available(address(rewardsToken)), _lot, "!lot");
+
+        // Goes unsold again, keeper relists it too
+        skip(1 days + 1);
+        vm.prank(keeper);
+        strategy.kickAuction(address(rewardsToken));
+
+        assertEq(auction.kicked(address(rewardsToken)), block.timestamp, "!relisted");
+        assertEq(auction.available(address(rewardsToken)), _lot, "!lot");
+    }
+
     function test_kickAuction_onlyStrategy() public {
         airdrop(rewardsToken, address(auction), 1_000e18);
 
