@@ -28,6 +28,19 @@ interface IFactory {
 
 }
 
+interface IFixedReportTrigger {
+
+    function setMinReportDelay(
+        address _strategy,
+        uint256 _minReportDelay
+    ) external;
+
+    function getReportDelay(
+        address _strategy
+    ) external view returns (uint256);
+
+}
+
 contract Setup is Deploy, Test, IEvents {
 
     // Contract instances that we will use repeatedly.

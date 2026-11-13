@@ -6,6 +6,8 @@ import "forge-std/Script.sol";
 import {IVault} from "@yearn-vaults/interfaces/IVault.sol";
 import {IVaultFactory} from "@yearn-vaults/interfaces/IVaultFactory.sol";
 
+import {IAprOracle} from "../src/interfaces/IAprOracle.sol";
+import {ICommonReportTrigger} from "../src/interfaces/ICommonReportTrigger.sol";
 import {IStrategyInterface} from "../src/interfaces/IStrategyInterface.sol";
 import {StrategyFactory} from "../src/StrategyFactory.sol";
 import {MonolithSwanAprOracle} from "../src/periphery/MonolithSwanAprOracle.sol";
@@ -34,6 +36,10 @@ contract Deploy is Script {
     address public constant YHAAS = 0x604e586F17cE106B64185A7a0d2c1Da5bAce711E; // yHAAS
     address public constant ROLE_MANAGER = 0xb3bd6B2E61753C311EFbCF0111f75D29706D9a41; // Yearn RoleManager
     IVaultFactory public constant VAULT_FACTORY = IVaultFactory(0x311de24e48C360B9A7765E7aB7eCDBABCd27B134); // 3.1.1 Vault Factory
+    address public constant FIXED_REPORT_TRIGGER = 0x7D0Edcad30ceA4270d7AC62a4573E4B6FD969f5E; // Defaults to 3 days, SMS needs to set it to 1 day
+    ICommonReportTrigger public constant COMMON_REPORT_TRIGGER =
+        ICommonReportTrigger(0xf8dF17a35c88AbB25e83C92f9D293B4368b9D52D); // Yearn Common Trigger
+    IAprOracle public constant CENTRAL_APR_ORACLE = IAprOracle(0x1981AD9F44F2EA9aDd2dC4AD7D075c102C70aF92); // Yearn APR Oracle
 
     address public constant SWAN = 0xD0a32F6d4850F9D6DF7d4F8f84af1Fcd3Cf993CC;
     address public constant SSWAN = 0xcBC108384e874D9B0436adE3918685BaA709e48c;
@@ -59,7 +65,7 @@ contract Deploy is Script {
         // deploy. The deployer manages the factory and hands each strategy over to `s_management`
         s_factory = new StrategyFactory(_deployer, s_performanceFeeRecipient, s_keeper, s_emergencyAdmin);
         s_newStrategy = IStrategyInterface(s_factory.newStrategy(SWAN, _name, SSWAN));
-        s_vault = IVault(VAULT_FACTORY.deploy_new_vault(SWAN, "SWAN yVault", "yvSWAN", _deployer, 3 days));
+        s_vault = IVault(VAULT_FACTORY.deploy_new_vault(SWAN, "SWAN yVault", "yvSWAN", _deployer, 1 days));
         s_oracle = new MonolithSwanAprOracle(_deployer);
 
         // init strategy. Only the vault deposits, so it unlocks profit and charges fees instead
@@ -71,6 +77,8 @@ contract Deploy is Script {
         s_newStrategy.setPerformanceFee(0);
         s_newStrategy.setAllowed(address(s_vault), true);
         s_newStrategy.delegate(_deployer); // Deployer votes the strategy's sSWAN
+        COMMON_REPORT_TRIGGER.setCustomStrategyTrigger(address(s_newStrategy), FIXED_REPORT_TRIGGER);
+        CENTRAL_APR_ORACLE.setOracle(address(s_newStrategy), address(s_oracle));
         s_newStrategy.setPendingManagement(s_management);
 
         // init vault
@@ -99,3 +107,8 @@ contract Deploy is Script {
     }
 
 }
+
+// Factory address: 0x46425D0Ca4Be2bb4Fc6C2ff7D4678668973Aa648
+// Strategy address: 0x30eD3282c624B25dC2193b2b434842730c2d20BE
+// Vault address: 0xcE918671E6D9e56E19c5Cbc4DC45655d80C65265
+// APR oracle address: 0x549286b927F8451E579a589098b7Cf76BC8ab634

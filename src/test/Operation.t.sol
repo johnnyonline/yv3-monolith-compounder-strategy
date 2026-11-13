@@ -2,7 +2,7 @@
 pragma solidity ^0.8.18;
 
 import "forge-std/console2.sol";
-import {Setup, ERC20, IStrategyInterface} from "./utils/Setup.sol";
+import {Setup, ERC20, IStrategyInterface, IFixedReportTrigger} from "./utils/Setup.sol";
 
 contract OperationTest is Setup {
 
@@ -42,6 +42,39 @@ contract OperationTest is Setup {
         assertEq(auction.startingPrice(), 100_000e18);
         assertEq(auction.minimumPrice(), 1e18);
         assertEq(auction.stepDecayRate(), 50);
+
+        // Reported by the fixed report trigger
+        assertEq(COMMON_REPORT_TRIGGER.customStrategyTrigger(address(strategy)), FIXED_REPORT_TRIGGER);
+    }
+
+    function test_reportTrigger(
+        uint256 _amount
+    ) public {
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+
+        // Defaults to 3 days until SMS sets ours to 1 day
+        IFixedReportTrigger _trigger = IFixedReportTrigger(FIXED_REPORT_TRIGGER);
+        assertEq(_trigger.getReportDelay(address(strategy)), 3 days);
+        vm.prank(SMS);
+        _trigger.setMinReportDelay(address(strategy), 1 days);
+        assertEq(_trigger.getReportDelay(address(strategy)), 1 days);
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        // Below the acceptable base fee
+        vm.fee(1 gwei);
+
+        // Not right after a report
+        vm.prank(keeper);
+        strategy.report();
+        (bool _shouldReport,) = COMMON_REPORT_TRIGGER.strategyReportTrigger(address(strategy));
+        assertFalse(_shouldReport, "!trigger");
+
+        // A day later
+        skip(1 days + 1);
+        (_shouldReport,) = COMMON_REPORT_TRIGGER.strategyReportTrigger(address(strategy));
+        assertTrue(_shouldReport, "!trigger");
     }
 
     function test_newStrategy() public {

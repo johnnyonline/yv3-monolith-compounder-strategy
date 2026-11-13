@@ -9,7 +9,9 @@ Yearn V3 tokenized strategy that autocompounds a staked [Monolith](https://app.m
 - `StrategyFactory.newStrategy(asset, name, staking)` deploys one per gov token. Only the factory's management can call it. Auction prices are set afterwards.
 - `MonolithSwanAprOracle` works like the Monolith UI. It takes the market's current yearly revenue (the local reserve share of interest plus the PSM's sUSDS yield) times the stakers' share, prices it in the gov token and divides by the staked supply. The price is a manual one if set, else the Uniswap V4 pool's spot price. Governance and the keepers it allows can set the manual price.
 
-`script/Deploy.s.sol` deploys the factory, the SWAN strategy, the APR oracle and a Yearn V3 vault (`yvSWAN`) with the strategy as its only strategy. Only the vault can deposit into the strategy. Profit unlocking (3 days) and fees live at the vault, so the strategy has neither. Vault role management goes to the Yearn RoleManager, whose `addNewVault` sets the vault's accountant. The strategy's votes are delegated to the deployer.
+`script/Deploy.s.sol` deploys the factory, the SWAN strategy, the APR oracle and a Yearn V3 vault (`yvSWAN`) with the strategy as its only strategy. Only the vault can deposit into the strategy. Profit unlocking (1 day) and fees live at the vault, so the strategy has neither. Vault role management goes to the Yearn RoleManager, whose `addNewVault` sets the vault's accountant. The strategy's votes are delegated to the deployer.
+
+The script also registers the APR oracle in Yearn's central APR oracle and the strategy in the fixed report trigger (`0x7D0Edcad30ceA4270d7AC62a4573E4B6FD969f5E`). The trigger defaults to reporting every 3 days. SMS needs to call `setMinReportDelay(strategy, 1 days)` on it so the strategy reports, and kicks its auction, daily.
 
 | Contract | Address |
 | --- | --- |

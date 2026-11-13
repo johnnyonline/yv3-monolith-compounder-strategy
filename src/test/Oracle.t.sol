@@ -13,6 +13,12 @@ contract OracleTest is Setup {
     function test_setupOracleOK() public {
         assertEq(oracle.governance(), management);
         assertEq(oracle.poolIds(address(strategy)), 0x8f685c4188141352435483577d706d36d3259f45619fe0c6341d3f72dc8d7232);
+
+        // Registered in the central APR oracle
+        assertEq(CENTRAL_APR_ORACLE.oracles(address(strategy)), address(oracle));
+        assertEq(
+            CENTRAL_APR_ORACLE.getStrategyApr(address(strategy), 0), oracle.aprAfterDebtChange(address(strategy), 0)
+        );
     }
 
     function test_price() public {

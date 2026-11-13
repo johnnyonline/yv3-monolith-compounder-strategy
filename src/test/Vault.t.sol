@@ -12,7 +12,7 @@ contract VaultTest is Setup {
     function test_setupVaultOK() public {
         assertEq(vault.apiVersion(), "3.1.1");
         assertEq(vault.asset(), address(asset));
-        assertEq(vault.profitMaxUnlockTime(), 3 days);
+        assertEq(vault.profitMaxUnlockTime(), 1 days);
         assertEq(vault.deposit_limit(), type(uint256).max);
         assertTrue(vault.auto_allocate());
         assertEq(vault.future_role_manager(), management);
@@ -50,13 +50,21 @@ contract VaultTest is Setup {
         (uint256 profit,) = strategy.report();
         assertGt(profit, 0, "!profit");
 
-        // Vault picks it up and unlocks it over 3 days
+        // Vault picks it up and unlocks it over a day
         vm.prank(keeper);
         (uint256 gain, uint256 loss) = vault.process_report(address(strategy));
         assertApproxEqAbs(gain, profit, 1, "!gain");
         assertEq(loss, 0, "!loss");
 
-        skip(vault.profitMaxUnlockTime());
+        // Vault reports the strategy again a day later. Below the acceptable base fee
+        vm.fee(1 gwei);
+        (bool _shouldReport,) = COMMON_REPORT_TRIGGER.vaultReportTrigger(address(vault), address(strategy));
+        assertFalse(_shouldReport, "!trigger");
+
+        skip(vault.profitMaxUnlockTime() + 1);
+
+        (_shouldReport,) = COMMON_REPORT_TRIGGER.vaultReportTrigger(address(vault), address(strategy));
+        assertTrue(_shouldReport, "!trigger");
 
         // Withdraw all funds
         uint256 _shares = vault.balanceOf(user);
